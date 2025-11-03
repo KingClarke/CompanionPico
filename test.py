@@ -24,7 +24,6 @@ idx_to_label = {v: k for k, v in label_map.items()}
 # ========================
 # TOKENIZER
 # ========================
-# (If you have a saved tokenizer, load it instead)
 tokenizer = Tokenizer(num_words=vocab_size, oov_token="<OOV>")
 tokenizer.fit_on_texts([
     "I am very happy today",

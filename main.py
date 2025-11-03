@@ -22,7 +22,7 @@ with open(csv_file, "r", encoding="utf-8") as f:
 data = pd.read_csv("training_data.csv")
 
 texts = data["text"].tolist()   # sentences
-labels_str = data["label"].tolist()  # e.g. ["happy", "sad", "angry"]
+labels_str = data["label"].tolist()
 
 # Map string labels -> numeric classes
 label_map = {label: idx for idx, label in enumerate(sorted(set(labels_str)))}
