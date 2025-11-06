@@ -62,7 +62,7 @@ with open("label_map.json", "w") as f:
 
 # Convert to TFLite (fully native ops, no flex)
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
-converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE]  # optional 8-bit quantization
+converter.optimizations = [tf.lite.Optimize.DEFAULT]  # optional 8-bit quantization
 tflite_model = converter.convert()
 
 import os
@@ -85,3 +85,22 @@ with open(save_path, "wb") as f:
     f.write(tflite_model)
 
 print(f"TFLite model saved at '{save_path}'")
+
+# tflite_to_c.py
+tflite_file = save_path
+c_file = "emotion_model.cc"
+array_name = "emotion_model_tflite"
+
+with open(tflite_file, "rb") as f:
+    data = f.read()
+
+with open(c_file, "w") as f:
+    f.write(f"const unsigned char {array_name}[] = {{\n")
+    for i, b in enumerate(data):
+        if i % 12 == 0:
+            f.write("\n    ")
+        f.write(f"0x{b:02x}, ")
+    f.write("\n};\n")
+    f.write(f"const unsigned int {array_name}_len = {len(data)};\n")
+
+print(f"Created {c_file} ({len(data)} bytes)")

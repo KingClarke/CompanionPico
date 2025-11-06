@@ -9,8 +9,8 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 # ========================
 tflite_model_path = r"C:\Users\lukep\PycharmProjects\Emo\tflite_models\emotion_model_pico2.tflite"
 label_map_path = r"C:\Users\lukep\PycharmProjects\Emo\label_map.json"
-vocab_size = 5000
-max_len = 20
+vocab_size = 4000
+max_len = 18
 
 # ========================
 # LOAD LABEL MAP
