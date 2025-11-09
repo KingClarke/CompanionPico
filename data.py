@@ -9,7 +9,7 @@ import os
 # ========================
 # Set the path to save your training data
 data_file = r"C:\Users\lukep\PycharmProjects\Emo\training_data.csv"
-labels = ["happy", "sad", "angry", "scared", "hyper", "ego", "confused", "intense", "aroused", "denial", "approval"]
+labels = ["happy", "sad", "angry", "scared", "ego", "confused", "denial", "approval", "nervous"]
 
 # Make sure the file exists
 if not os.path.exists(data_file):
