@@ -13,6 +13,8 @@ from tensorflow.keras.optimizers import Adam
 import numpy as np
 from tensorflow.keras.layers import Conv1D
 
+from tensorflow.keras.callbacks import EarlyStopping
+
 # Check CSV for lines with wrong number of fields
 csv_file = "training_data.csv"
 expected_columns = 2
@@ -34,13 +36,22 @@ labels_str = data["label"].tolist()
 label_map = {label: idx for idx, label in enumerate(sorted(set(labels_str)))}
 labels = [label_map[l] for l in labels_str]
 
+import json
+
+with open("label_map.json", "w", encoding="utf-8") as f:
+    json.dump(label_map, f, ensure_ascii=False, indent=2)
+print("Saved label map to 'label_map.json' nya~")
+
 # === Tokenize ===
-vocab_size = 2500
-max_len = 10
+vocab_size = 255
+max_len = 9
 tokenizer = Tokenizer(num_words=vocab_size, oov_token="<OOV>")
 tokenizer.fit_on_texts(texts)
 sequences = tokenizer.texts_to_sequences(texts)
 padded = pad_sequences(sequences, maxlen=max_len, padding='post')
+# TRAIN IN FLOAT32 for proper gradients
+padded = padded.astype(np.float32) / 255.0
+padded = padded[..., np.newaxis]
 
 # === One-hot labels ===
 num_classes = len(label_map)
@@ -48,106 +59,65 @@ labels_onehot = np.eye(num_classes)[labels]
 
 # === Split into train + validation ===
 X_train, X_val, y_train, y_val = train_test_split(
-    padded, labels_onehot, test_size=0.25, random_state=42
-)  # 15% of data for validation
+    padded, labels_onehot, test_size=0.15, random_state=1
+)
 
 # === Model ===
-embedding_dim = 12
-
-def zero_pad_mask(x):
-    # x.shape = (batch, seq_len, embedding_dim)
-    mask = K.cast(K.not_equal(K.sum(x, axis=-1), 0), K.floatx())  # (batch, seq_len)
-    mask = K.expand_dims(mask, axis=-1)                            # (batch, seq_len, 1)
-    mask = K.tile(mask, [1, 1, K.shape(x)[-1]])                   # broadcast to embedding_dim
-    return x * mask
-
 model = Sequential([
-    Embedding(input_dim=vocab_size, output_dim=embedding_dim, input_length=max_len),
-    Lambda(zero_pad_mask),
-    Conv1D(24, 3, activation="relu", padding="same"),
-    Conv1D(12, 3, activation="relu", padding="same"),
-    GlobalAveragePooling1D(),
-    Dropout(0.15),
+    Conv1D(16, 3, activation="relu", padding="same", input_shape=(max_len, 1)),
+    Flatten(),
     Dense(32, activation="relu"),
-    Dense(24, activation="relu"),
+    Dropout(0.25),
     Dense(num_classes, activation="softmax")
 ])
 
-optimizer = Adam(learning_rate=0.003)
+optimizer = Adam(learning_rate=0.0015)
 model.compile(loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"])
 
-model.summary()
-
-# === Fit with validation ===
-history = model.fit(
-    X_train, y_train,
-    epochs=100,
-    verbose=2,
-    validation_data=(X_val, y_val)  # <--- here’s the validator!
+early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=15,
+    restore_best_weights=True
 )
 
-# Optional: print final validation accuracy
-val_acc = history.history['val_accuracy'][-1]
-print(f"\nFinal validation accuracy: {val_acc*100:.2f}%")
+history = model.fit(
+    X_train, y_train,
+    epochs=300,
+    validation_data=(X_val, y_val),
+    callbacks=[early_stop],
+    verbose=2
+)
 
-# Save label map so you can decode predictions later
-import json
-with open("label_map.json", "w") as f:
-    json.dump(label_map, f)
+print(f"\nFinal validation accuracy: {history.history['val_accuracy'][-1]*100:.2f}%")
 
+# === TFLite conversion with UINT8 for MCU ===
 def representative_data_gen():
-    # Use a few real or sample sentences to calibrate quantization
     for i in range(100):
-        # Pick random padded examples from your dataset
+        # Use float32 values 0–1 for calibration
         yield [padded[i:i+1].astype(np.float32)]
 
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
-
-# Force full INT8 quantization
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.representative_dataset = representative_data_gen
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-converter.inference_input_type = tf.int8
-converter.inference_output_type = tf.int8
+# MCU expects uint8 inputs
+converter.inference_input_type = tf.uint8
+converter.inference_output_type = tf.uint8
 
 tflite_model = converter.convert()
 
+# === Save TFLite model and tokenizer ===
 import os
 
-# Folder to save TFLite model
 save_folder = r"C:\Users\lukep\PycharmProjects\Emo\tflite_models"
-os.makedirs(save_folder, exist_ok=True)  # creates folder if it doesn't exist
+os.makedirs(save_folder, exist_ok=True)
 
-# Save tokenizer word_index
+top_words = dict(list(tokenizer.word_index.items())[:255])
 with open(os.path.join(save_folder, "word_index.json"), "w", encoding="utf-8") as f:
-    json.dump(tokenizer.word_index, f, ensure_ascii=False, indent=2)
-print(f"Word index saved at '{os.path.join(save_folder, 'word_index.json')}'")
+    json.dump(top_words, f, ensure_ascii=False, indent=2)
 
-
-# Save path
 save_path = os.path.join(save_folder, "emotion_model_pico2.tflite")
-
-# Save the TFLite model
 with open(save_path, "wb") as f:
     f.write(tflite_model)
 
 print(f"TFLite model saved at '{save_path}'")
-
-# tflite_to_c.py
-tflite_file = save_path
-c_file = "emotion_model.cc"
-array_name = "emotion_model_tflite"
-
-with open(tflite_file, "rb") as f:
-    data = f.read()
-
-with open(c_file, "w") as f:
-    f.write(f"const unsigned char {array_name}[] = {{\n")
-    for i, b in enumerate(data):
-        if i % 12 == 0:
-            f.write("\n    ")
-        f.write(f"0x{b:02x}, ")
-    f.write("\n};\n")
-    f.write(f"const unsigned int {array_name}_len = {len(data)};\n")
-
-print(f"Created {c_file} ({len(data)} bytes)")
