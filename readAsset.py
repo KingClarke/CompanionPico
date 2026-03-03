@@ -34,7 +34,7 @@ def preview_from_header(header_path):
     # 4. Reconstruct Image
     # 160 * 120 = 19200 pixels
     pixel_data = palette_rgb[indices]
-    img_array = pixel_data.reshape((240, 320, 3))
+    img_array = pixel_data.reshape((120, 160, 3))
 
     # 5. Show and Save
     final_img = Image.fromarray(img_array)
