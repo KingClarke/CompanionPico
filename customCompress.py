@@ -66,11 +66,6 @@ def convert_to_pico_header(image_path, n_colors=16, saturation_boost=1.5, sample
     # 8. Write Header with struct
     with open(f"{header_name}.h", "w") as f:
         f.write(f"#ifndef {header_name.upper()}_H\n#define {header_name.upper()}_H\n#include <stdint.h>\n\n")
-        f.write("struct Image {\n")
-        f.write("    const uint16_t* palette;\n")
-        f.write("    const uint8_t* data;\n")
-        f.write("    int width;\n")
-        f.write("    int height;\n};\n\n")
         f.write(f"const uint16_t {header_name}_palette[16] = {{{', '.join(palette_565)}}};\n\n")
         f.write(f"const uint8_t {header_name}_data[{len(packed_data)}] = {{\n    ")
         for i, b in enumerate(packed_data):
@@ -83,4 +78,4 @@ def convert_to_pico_header(image_path, n_colors=16, saturation_boost=1.5, sample
     print(f"Saved {header_name}.h ({len(packed_data) / 1024:.2f} KB)")
 
 # Example usage:
-convert_to_pico_header("input.png")
+convert_to_pico_header("input.jpg")
